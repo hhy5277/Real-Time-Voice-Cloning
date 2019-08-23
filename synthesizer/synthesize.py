@@ -1,4 +1,4 @@
-from synthesizer.synthesizer import Synthesizer
+from synthesizer.tacotron2 import Tacotron2
 from synthesizer.hparams import hparams_debug_string
 from synthesizer.infolog import log
 import tensorflow as tf
@@ -18,8 +18,7 @@ def run_eval(args, checkpoint_path, output_dir, hparams, sentences):
     os.makedirs(os.path.join(log_dir, "plots"), exist_ok=True)
     
     log(hparams_debug_string())
-    synth = Synthesizer()
-    synth.load(checkpoint_path, hparams)
+    synth = Tacotron2(checkpoint_path, hparams)
     
     #Set inputs batch wise
     sentences = [sentences[i: i+hparams.tacotron_synthesis_batch_size] for i 
@@ -44,10 +43,9 @@ def run_synthesis(in_dir, out_dir, model_dir, hparams):
     print(hparams_debug_string())
     
     # Load the model in memory
-    synth = Synthesizer()
     weights_dir = os.path.join(model_dir, "taco_pretrained")
     checkpoint_fpath = tf.train.get_checkpoint_state(weights_dir).model_checkpoint_path
-    synth.load(checkpoint_fpath, hparams, gta=True)
+    synth = Tacotron2(checkpoint_fpath, hparams, gta=True)
     
     # Load the metadata
     with open(metadata_filename, encoding="utf-8") as f:
@@ -82,29 +80,3 @@ def run_synthesis(in_dir, out_dir, model_dir, hparams):
     print("Synthesized mel spectrograms at {}".format(synth_dir))
     return meta_out_fpath
 
-
-def tacotron_synthesize(args, hparams, checkpoint, sentences=None):
-    output_dir = args.output_dir
-    
-    try:
-        checkpoint_path = tf.train.get_checkpoint_state(checkpoint).model_checkpoint_path
-        log("loaded model at {}".format(checkpoint_path))
-    except:
-        raise RuntimeError("Failed to load checkpoint at {}".format(checkpoint))
-    
-    if hparams.tacotron_synthesis_batch_size < hparams.tacotron_num_gpus:
-        raise ValueError("Defined synthesis batch size {} is smaller than minimum required {} "
-                         "(num_gpus)! Please verify your synthesis batch size choice.".format(
-            hparams.tacotron_synthesis_batch_size, hparams.tacotron_num_gpus))
-    
-    if hparams.tacotron_synthesis_batch_size % hparams.tacotron_num_gpus != 0:
-        raise ValueError("Defined synthesis batch size {} is not a multiple of {} (num_gpus)! "
-                         "Please verify your synthesis batch size choice!".format(
-            hparams.tacotron_synthesis_batch_size, hparams.tacotron_num_gpus))
-    
-    if args.mode == "eval":
-        return run_eval(args, checkpoint_path, output_dir, hparams, sentences)
-    elif args.mode == "synthesis":
-        return run_synthesis(args, checkpoint_path, output_dir, hparams)
-    else:
-        run_live(args, checkpoint_path, hparams)
